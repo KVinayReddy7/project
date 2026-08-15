@@ -89,28 +89,33 @@ class RosWorker(QThread):
     # ------------------------------------------------------------------
 
     def _run_simulation(self) -> None:
+        import queue
         import threading
         from simulation.bus import publish, subscribe
         from simulation.mock_robot import SimMockRobot
 
         self._sim_publish = publish
         self._sim_robot = SimMockRobot()
-        subscribe("/telemetry", self._on_sim_telemetry)
+
+        # Queue bridges the plain threading.Thread → QThread boundary safely
+        _queue: queue.Queue = queue.Queue()
+        subscribe("/telemetry", _queue.put)
 
         robot_thread = threading.Thread(target=self._sim_robot.run, daemon=True)
         robot_thread.start()
 
-        self.connection_changed.emit(True, "Simulation mode (ROS2 not detected)")
+        self.connection_changed.emit(True, "Simulation Mode")
 
+        # Emit signals from this QThread, never from the robot thread
         while not self._stop_requested:
-            time.sleep(0.05)
+            try:
+                data = _queue.get(timeout=0.05)
+                self.telemetry_received.emit(float(data[0]), float(data[1]), bool(data[2]))
+            except queue.Empty:
+                pass
 
         self._sim_robot.stop()
         robot_thread.join(timeout=2.0)
-
-    def _on_sim_telemetry(self, data) -> None:
-        # Called from the robot thread; Qt queued-connection delivers to main thread
-        self.telemetry_received.emit(float(data[0]), float(data[1]), bool(data[2]))
 
     # ------------------------------------------------------------------
     # Command publishing (works in both modes)

@@ -29,7 +29,8 @@ ros2:
 			noble)   ROS_DISTRO=jazzy ;; \
 			oracular) ROS_DISTRO=jazzy ;; \
 			plucky|questing) ROS_DISTRO=kilted ;; \
-			*)       ROS_DISTRO=kilted ;; \
+			resolute) ROS_DISTRO=locus ;; \
+			*)       ROS_DISTRO=locus ;; \
 		esac; \
 		echo "==> Ubuntu $$UBUNTU_CODENAME — attempting ROS2 $$ROS_DISTRO install..."; \
 		sudo apt-get install -y software-properties-common curl -q; \

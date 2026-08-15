@@ -9,7 +9,13 @@ class TelemetryLogger:
     def __init__(self, output_path: Path):
         self.output_path = output_path
         self.output_path.parent.mkdir(parents=True, exist_ok=True)
-        self._file = self.output_path.open("a", newline="", encoding="utf-8")
+        try:
+            self._file = self.output_path.open("a", newline="", encoding="utf-8")
+        except PermissionError:
+            # Fall back to home directory when project data/ is owned by root
+            self.output_path = Path.home() / "telemetry.csv"
+            print(f"[Logger] Permission denied — writing CSV to {self.output_path}")
+            self._file = self.output_path.open("a", newline="", encoding="utf-8")
         self._writer = csv.writer(self._file)
         if self.output_path.stat().st_size == 0:
             self._writer.writerow(("timestamp", "battery_percent", "velocity", "running"))
