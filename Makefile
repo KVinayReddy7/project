@@ -6,18 +6,16 @@ VENV  := .venv
 all: run
 
 # ── Python environment ─────────────────────────────────────────────────────────
-# Target file acts as a sentinel — setup only runs when venv is absent.
+# setup is PHONY so pip install always runs — prevents stale-venv issues.
 
-$(VENV)/bin/activate:
-	@echo "==> Installing system packages (pyqt5, venv)..."
-	@sudo apt-get install -y python3-venv python3-pyqt5 -q
-	@echo "==> Creating Python virtual environment..."
-	@python3 -m venv --system-site-packages $(VENV)
+setup:
+	@echo "==> Installing system packages..."
+	@sudo apt-get install -y python3-venv python3-pyqt5 -q 2>/dev/null || \
+		echo "  apt step failed — ensure python3-venv and python3-pyqt5 are available."
+	@[ -d "$(VENV)" ] || python3 -m venv --system-site-packages $(VENV)
 	@$(VENV)/bin/pip install --quiet --upgrade pip
-	@$(VENV)/bin/pip install --quiet pyqtgraph
+	@$(VENV)/bin/pip install --quiet -r requirements.txt
 	@echo "==> Python environment ready."
-
-setup: $(VENV)/bin/activate
 
 # ── ROS2 installation ──────────────────────────────────────────────────────────
 
@@ -33,16 +31,16 @@ ros2:
 			plucky|questing) ROS_DISTRO=kilted ;; \
 			*)       ROS_DISTRO=kilted ;; \
 		esac; \
-		echo "==> Ubuntu $$UBUNTU_CODENAME detected — installing ROS2 $$ROS_DISTRO (~800 MB)..."; \
+		echo "==> Ubuntu $$UBUNTU_CODENAME — attempting ROS2 $$ROS_DISTRO install..."; \
 		sudo apt-get install -y software-properties-common curl -q; \
 		sudo add-apt-repository universe -y; \
 		sudo curl -fsSL https://raw.githubusercontent.com/ros/rosdistro/master/ros.key \
-			-o /usr/share/keyrings/ros-archive-keyring.gpg; \
+			-o /usr/share/keyrings/ros-archive-keyring.gpg 2>/dev/null && \
 		echo "deb [arch=$$(dpkg --print-architecture) signed-by=/usr/share/keyrings/ros-archive-keyring.gpg] http://packages.ros.org/ros2/ubuntu $$UBUNTU_CODENAME main" \
-			| sudo tee /etc/apt/sources.list.d/ros2.list > /dev/null; \
-		sudo apt-get update -q; \
-		sudo apt-get install -y ros-$$ROS_DISTRO-ros-base ros-dev-tools -q \
-			|| echo "  WARNING: ROS2 install failed — app will run in simulation mode."; \
+			| sudo tee /etc/apt/sources.list.d/ros2.list > /dev/null && \
+		sudo apt-get update -q && \
+		sudo apt-get install -y ros-$$ROS_DISTRO-ros-base ros-dev-tools -q || \
+		echo "  ROS2 packages unavailable for Ubuntu $$UBUNTU_CODENAME/$$ROS_DISTRO — simulation mode will be used (all features work)."; \
 	fi
 
 # ── Launch ─────────────────────────────────────────────────────────────────────
