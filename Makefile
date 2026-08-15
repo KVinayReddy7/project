@@ -1,8 +1,7 @@
 .PHONY: all setup ros2 run stop clean clean-all
 
-SHELL     := /bin/bash
-ROS_SETUP := /opt/ros/jazzy/setup.bash
-VENV      := .venv
+SHELL := /bin/bash
+VENV  := .venv
 
 all: run
 
@@ -23,18 +22,26 @@ setup: $(VENV)/bin/activate
 # ── ROS2 installation ──────────────────────────────────────────────────────────
 
 ros2:
-	@if [ -f "$(ROS_SETUP)" ]; then \
-		echo "==> ROS2 already installed."; \
+	@ROS_FOUND=$$(find /opt/ros -maxdepth 2 -name "setup.bash" 2>/dev/null | head -1); \
+	if [ -n "$$ROS_FOUND" ]; then \
+		echo "==> ROS2 found: $$ROS_FOUND"; \
 	else \
-		echo "==> ROS2 not found — installing Jazzy (ros-base, ~800 MB)..."; \
+		. /etc/os-release; \
+		case "$$UBUNTU_CODENAME" in \
+			noble)   ROS_DISTRO=jazzy ;; \
+			oracular) ROS_DISTRO=jazzy ;; \
+			plucky|questing) ROS_DISTRO=kilted ;; \
+			*)       ROS_DISTRO=kilted ;; \
+		esac; \
+		echo "==> Ubuntu $$UBUNTU_CODENAME detected — installing ROS2 $$ROS_DISTRO (~800 MB)..."; \
 		sudo apt-get install -y software-properties-common curl -q; \
 		sudo add-apt-repository universe -y; \
 		sudo curl -fsSL https://raw.githubusercontent.com/ros/rosdistro/master/ros.key \
 			-o /usr/share/keyrings/ros-archive-keyring.gpg; \
-		echo "deb [arch=$$(dpkg --print-architecture) signed-by=/usr/share/keyrings/ros-archive-keyring.gpg] http://packages.ros.org/ros2/ubuntu $$(. /etc/os-release && echo $$UBUNTU_CODENAME) main" \
+		echo "deb [arch=$$(dpkg --print-architecture) signed-by=/usr/share/keyrings/ros-archive-keyring.gpg] http://packages.ros.org/ros2/ubuntu $$UBUNTU_CODENAME main" \
 			| sudo tee /etc/apt/sources.list.d/ros2.list > /dev/null; \
 		sudo apt-get update -q; \
-		sudo apt-get install -y ros-jazzy-ros-base ros-dev-tools -q \
+		sudo apt-get install -y ros-$$ROS_DISTRO-ros-base ros-dev-tools -q \
 			|| echo "  WARNING: ROS2 install failed — app will run in simulation mode."; \
 	fi
 
@@ -46,12 +53,13 @@ run: setup ros2
 	@echo "==> Launching Robotics Telemetry Dashboard..."
 	@bash -c '\
 		MOCK_PID=""; \
-		if [ -f "$(ROS_SETUP)" ]; then \
-			source $(ROS_SETUP); \
+		ROS_SETUP=$$(find /opt/ros -maxdepth 2 -name "setup.bash" 2>/dev/null | sort -r | head -1); \
+		if [ -n "$$ROS_SETUP" ]; then \
+			source "$$ROS_SETUP"; \
 			source $(VENV)/bin/activate; \
 			python -m ros_nodes.mock_robot_node & \
 			MOCK_PID=$$!; \
-			echo "  [ROS2 mode] Mock robot PID: $$MOCK_PID"; \
+			echo "  [ROS2 mode] $$ROS_SETUP — mock robot PID: $$MOCK_PID"; \
 		else \
 			source $(VENV)/bin/activate; \
 			echo "  [Simulation mode] ROS2 unavailable — using built-in simulation."; \
