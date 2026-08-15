@@ -1,57 +1,56 @@
 # Robotics Telemetry Dashboard
 
-A lightweight PyQt5 desktop dashboard for a simulated ROS2 robot. It sends start/stop commands, displays battery and velocity, plots velocity live, and logs every telemetry sample to CSV.
+A desktop GUI built with PyQt5 that connects to a ROS2 node to send commands and visualise live robot telemetry.
 
-## Requirements
+## Stack
 
-This project targets Ubuntu 24.04 LTS with ROS2 Jazzy. Install ROS2 Jazzy first and make sure `rclpy` and `std_msgs` are available in the sourced ROS environment.
+- Python 3
+- PyQt5
+- ROS2 Jazzy
+- Ubuntu 24.04 LTS
 
-The ROS2 topics are:
+## What it does
 
-- `/telemetry`: `std_msgs/msg/Float32MultiArray`, data is `[battery_percent, velocity_mps, running_as_0_or_1]`
-- `/cmd_start`: `std_msgs/msg/Bool`
-- `/cmd_stop`: `std_msgs/msg/Bool`
+- **Start / Stop buttons** publish commands to `/cmd_start` and `/cmd_stop`
+- **Status panel** shows connection state, battery %, and velocity in real time
+- **Live plots** display velocity and battery level over time
+- **CSV logger** saves every telemetry message to `data/telemetry.csv` with timestamps
 
-## Install
+## ROS2 Topics
+
+| Topic | Type | Direction |
+|---|---|---|
+| `/telemetry` | `std_msgs/Float32MultiArray` | robot → GUI |
+| `/cmd_start` | `std_msgs/Bool` | GUI → robot |
+| `/cmd_stop` | `std_msgs/Bool` | GUI → robot |
+
+## How to run
 
 ```bash
-cd ~/Desktop/project
-sudo apt update
-sudo apt install python3-venv python3-pyqt5
-python3 -m venv --system-site-packages .venv
-source /opt/ros/jazzy/setup.bash
-source .venv/bin/activate
-python -m pip install -r requirements.txt
+git clone https://github.com/KVinayReddy7/project.git
+cd project
+make run
 ```
 
-`--system-site-packages` lets the virtual environment use Ubuntu's PyQt5 and ROS2 Python packages. If your ROS2 installation is in a different location, source that installation instead.
+`make run` installs all dependencies and launches everything in one shot. You need `sudo` access for the first run.
 
-## Run
-
-Open two terminals.
-
-Terminal 1, start the mock robot:
+Once ROS2 is installed, open a second terminal and start the mock robot node:
 
 ```bash
-cd ~/Desktop/project
 source /opt/ros/jazzy/setup.bash
 source .venv/bin/activate
 python -m ros_nodes.mock_robot_node
 ```
 
-Terminal 2, start the GUI:
+## How the threading works
 
-```bash
-cd ~/Desktop/project
-source /opt/ros/jazzy/setup.bash
-source .venv/bin/activate
-python main.py
-```
+ROS2 and PyQt5 each need their own thread. Mixing them directly causes the UI to freeze or crash.
 
-Click **Start** to publish a `True` message on `/cmd_start`; velocity will begin changing. Click **Stop** to publish on `/cmd_stop`; velocity returns to zero. The CSV file is written to `data/telemetry.csv`.
+The solution used here:
 
-## Threading design
+1. `RosWorker` is a `QThread` that owns the ROS2 node and runs `executor.spin_once()` in a loop
+2. When a `/telemetry` message arrives, the ROS2 callback emits a **Qt signal** with the data values
+3. Qt automatically delivers that signal to the main UI thread via a queued connection
+4. The main thread updates labels, plots, and writes to CSV — widgets are never touched from the ROS2 thread
 
-The GUI runs on Qt's main thread. `RosWorker` is a `QThread` that owns the ROS2 node and calls `executor.spin_once()` in its background loop. The ROS subscription callback emits Qt signals containing plain telemetry values. Qt delivers those signals to `MainWindow` in the main thread, where labels, the plot, and the CSV logger are updated. This prevents ROS callbacks from touching Qt widgets directly and keeps the interface responsive.
-
-When the window closes, the logger is closed and the worker is asked to stop before the process exits.
+This keeps the GUI responsive regardless of how busy the ROS2 side is.
